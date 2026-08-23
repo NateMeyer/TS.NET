@@ -188,21 +188,25 @@ public class EngineManager
                     {
                         logger?.LogInformation($"Calibration loaded from path: {calibrationFile}");
                         loadedCalibration = Calibration.FromJsonFile(calibrationFile);
+                        ts.SetCalibration(loadedCalibration);
                     }
                     else if (ThunderscopeNonVolatileMemory.TryReadUserCalibration(ts, out var userCalibration))
                     {
                         logger?.LogInformation($"Calibration loaded from user calibration memory");
                         loadedCalibration = userCalibration!;
+                        ts.SetCalibration(loadedCalibration);
                     }
                     else if (ThunderscopeNonVolatileMemory.TryReadFactoryCalibration(ts, out var factoryCalibration))
                     {
                         logger?.LogInformation($"Calibration loaded from factory calibration memory");
                         loadedCalibration = factoryCalibration!;
+                        // Factory Calibration loaded by tslitex
                     }
                     else if (File.Exists("thunderscope-calibration.json"))
                     {
                         logger?.LogInformation($"Calibration loaded from thunderscope-calibration.json");
                         loadedCalibration = Calibration.FromJsonFile("thunderscope-calibration.json");
+                        ts.SetCalibration(loadedCalibration);
                     }
                     else
                     {
@@ -225,7 +229,7 @@ public class EngineManager
                     initialHardwareConfiguration.ExtSyncMode = ThunderscopeExtSyncMode.Disabled;
                     initialHardwareConfiguration.RefClockMode = ThunderscopeRefClockMode.Disabled;
                     initialHardwareConfiguration.RefClockFrequencyHz = 10_000_000;
-                    ts.Configure(initialHardwareConfiguration, loadedCalibration, thunderscopeSettings.HardwareRevision);
+                    ts.Configure(initialHardwareConfiguration);
                     ts.StartMonitoring();
                     thunderscope = ts;
                     break;

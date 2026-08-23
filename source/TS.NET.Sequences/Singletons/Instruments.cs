@@ -89,7 +89,7 @@ public class Instruments
         hardwareConfig.Frontend[3] = ThunderscopeChannelFrontend.Default();
         thunderScope = new Driver.Libtslitex.Thunderscope(loggerFactory, 1024 * 1024);
         thunderScope.Open(0);
-        thunderScope.Configure(hardwareConfig, Calibration.Default(), "");
+        thunderScope.Configure(hardwareConfig);
         // Need to set manual control on all channels so that SetRate doesn't run normal logic
         var manualControl = new ThunderscopeChannelFrontendManualControl() { Coupling = ThunderscopeCoupling.DC, Termination = ThunderscopeTermination.OneMegaohm, Attenuator = 0, DAC = 2000, DPOT = 50, PgaLadderAttenuation = 0, PgaFilter = ThunderscopeBandwidth.Bw20M, PgaHighGain = 0 };
         thunderScope.SetChannelManualControl(0, manualControl);
@@ -144,10 +144,10 @@ public class Instruments
     {
         if (!enabledChannelIndices.SequenceEqual(cachedChannelIndices))
         {
-            thunderScope?.SetChannelEnable(0, enabledChannelIndices.Contains(0), updateFrontends: false);
-            thunderScope?.SetChannelEnable(1, enabledChannelIndices.Contains(1), updateFrontends: false);
-            thunderScope?.SetChannelEnable(2, enabledChannelIndices.Contains(2), updateFrontends: false);
-            thunderScope?.SetChannelEnable(3, enabledChannelIndices.Contains(3), updateFrontends: false);
+            thunderScope?.SetChannelEnable(0, enabledChannelIndices.Contains(0));
+            thunderScope?.SetChannelEnable(1, enabledChannelIndices.Contains(1));
+            thunderScope?.SetChannelEnable(2, enabledChannelIndices.Contains(2));
+            thunderScope?.SetChannelEnable(3, enabledChannelIndices.Contains(3));
             cachedSampleRateHz = 0;
             cachedChannelIndices = enabledChannelIndices;
         }

@@ -88,34 +88,98 @@ namespace TS.NET.Driver.Libtslitex
         }
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct tsAfePathCalibration_s
+        {
+            public double bufferInputVpp;
+            public double trimOffsetDacZeroC;
+            public double trimOffsetDacZeroM;
+            public double trimOffsetDacScale;
+            public uint trimDPot;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct tsChannelCalibration_t
         {
-            public int buffer_uV;
-            public int bias_uV;
-            public int attenuatorGain1M_mdB;
-            public int attenuatorGain50_mdB;
-            public int bufferGain_mdB;
-            public int trimRheostat_range;
-            public int preampLowGainError_mdB;
-            public int preampHighGainError_mdB;
+            public double attenuatorScale;
+            [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 11)]
+            public tsAfePathCalibration_s[] highPgaPathCal;
+            [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 11)]
+            public tsAfePathCalibration_s[] lowPgaPathCal;
 
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 11)]
-            public int[] preampAttenuatorGain_mdB;
-            public int preampOutputGainError_mdB;
-            public int preampLowOffset_uV;
-            public int preampHighOffset_uV;
-            public int preampInputBias_uA;
+            public tsChannelCalibration_t() { 
+                highPgaPathCal = new tsAfePathCalibration_s[11];
+                lowPgaPathCal = new tsAfePathCalibration_s[11]; }
+        }
 
-            public tsChannelCalibration_t() { preampAttenuatorGain_mdB = new int[11]; }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct tsAdcLoad_t
+        {
+            public uint rate;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
+            public double[] scale;
+
+            public tsAdcLoad_t() { scale = new double[4];}
+        }
+        
+        [StructLayout(LayoutKind.Sequential)]
+        public struct tsAdcLoadCal_t
+        {
+            public uint channels;
+            [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 8)]
+            public tsAdcLoad_t[] conf;
+
+            public tsAdcLoadCal_t() {
+                conf = new tsAdcLoad_t[8];
+                for (var cal = 0; cal < 8; cal++)
+                {
+                    conf[cal] = new tsAdcLoad_t();
+                }
+            }
+        }
+        
+        [StructLayout(LayoutKind.Sequential)]
+        public struct tsAdcGain_t
+        {
+            public uint rate;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public byte[] gain;
+
+            public tsAdcGain_t() { gain = new byte[8];}
+        }
+        
+        [StructLayout(LayoutKind.Sequential)]
+        public struct tsAdcGainCal_t
+        {
+            public uint channels;
+            [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 8)]
+            public tsAdcGain_t[] conf;
+
+            public tsAdcGainCal_t() {
+                conf = new tsAdcGain_t[8];
+                for (var cal = 0; cal < 8; cal++)
+                {
+                    conf[cal] = new tsAdcGain_t();
+                }
+            }
         }
 
         [StructLayout(LayoutKind.Sequential)]
         public struct tsAdcCalibration_t
         {
-            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
-            public byte[] branchFineGain;
+            [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 11)]
+            public tsAdcLoadCal_t[] loadCal;
+            [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 11)]
+            public tsAdcGainCal_t[] branchFineGain;
 
-            public tsAdcCalibration_t() { branchFineGain = new byte[8]; }
+            public tsAdcCalibration_t() {
+                loadCal = new tsAdcLoadCal_t[11];
+                branchFineGain = new tsAdcGainCal_t[11];
+                for (var cal = 0; cal < 11; cal++)
+                {
+                    loadCal[cal] = new tsAdcLoadCal_t();
+                    branchFineGain[cal] = new tsAdcGainCal_t();
+                }
+            }
         }
 
         public enum tsSampleFormat_t
@@ -171,7 +235,10 @@ namespace TS.NET.Driver.Libtslitex
         public static unsafe partial int UserDataWrite(nint ts, byte* buffer, uint offset, uint writeLen);
 
         [DllImport(library, EntryPoint = "thunderscopeChanCalibrationSet")]     // Use runtime marshalling for now. Custom marshalling later.
-        public static extern int SetCalibration(nint ts, uint channel, in tsChannelCalibration_t cal);
+        public static extern int SetAFECalibration(nint ts, uint channel, in tsChannelCalibration_t cal);
+
+        [DllImport(library, EntryPoint = "thunderscopeAdcCalibrationGet")]      // Use runtime marshalling for now. Custom marshalling later.
+        public static extern int GetAFECalibration(nint ts, uint channel, out tsChannelCalibration_t cal);
 
         [DllImport(library, EntryPoint = "thunderscopeAdcCalibrationSet")]      // Use runtime marshalling for now. Custom marshalling later.
         public static extern int SetAdcCalibration(nint ts, in tsAdcCalibration_t cal);
@@ -194,6 +261,9 @@ namespace TS.NET.Driver.Libtslitex
 
         [LibraryImport(library, EntryPoint = "thunderscopeCalibrationManualCtrl")]
         public static unsafe partial int SetChannelManualControl(nint ts, uint channel, in tsChannelCtrl_t ctrl);
+        
+        [LibraryImport(library, EntryPoint = "thunderscopeCalibrationManualAdcFineGain")]
+        public static unsafe partial int SetAdcManualFineGain(nint ts, in byte[] ctrl);
 
         public enum tsEventType_t
         {
