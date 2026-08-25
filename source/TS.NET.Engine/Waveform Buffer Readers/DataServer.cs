@@ -113,8 +113,10 @@ internal class DataServer : IThread
     {
         string sessionID = socket.RemoteEndPoint?.ToString() ?? "Unknown";
         uint sequenceNumber = 0;
-        uint nack = 0;
+        uint lastAck = 0;
         uint inflight = 0;
+        byte[] ackBuffer = new byte[4];
+        int ackBytes = 0;
 
         try
         {
@@ -127,7 +129,6 @@ internal class DataServer : IThread
                 {
                     if (!CheckForAcks(logger, socket))
                         break;
-                    inflight = sequenceNumber - nack;
 
                     // Figure out how many un-acked waveforms we have, block if >5 in flight
                     // TODO: tune this for latency/throughput tradeoff?
@@ -139,6 +140,7 @@ internal class DataServer : IThread
                     else
                     {
                         //logger.LogInformation($"Sending waveform (seq={sequenceNumber})");
+                        inflight++;
                         switch (mode)
                         {
                             case Mode.Credit:
@@ -149,7 +151,7 @@ internal class DataServer : IThread
                                 break;
                         }
 
-                        onSequenceUpdate(sequenceNumber);
+                        onSequenceUpdate(sequenceNumber);       // Possible timing issue here
                         sequenceNumber++;
                     }
                 }
@@ -199,31 +201,21 @@ internal class DataServer : IThread
 
         bool CheckForAcks(ILogger logger, Socket socket)
         {
-            //See if we have data ready to read. Grab the ACKs if so (may be >1 queued)
-            Span<byte> ack = stackalloc byte[4];
-            while (socket.Poll(1000, SelectMode.SelectRead))
+            if (socket.Poll(1000, SelectMode.SelectRead))
             {
-                //Get the ACK number (if we see one).
-                //TODO: this assumes all 4 bytes are always in the same TCP segment. Probably reasonable
-                //but for max robustness we'd want to handle partial acks somehow
-                int read = 0;
-                read = socket.Receive(ack);
-                if (read == 4)
-                {
-                    nack = BitConverter.ToUInt32(ack);
-                    inflight = sequenceNumber - nack;
-                    //logger.LogInformation($"Got ACK: {nack}, last sequenceNumber={sequenceNumber}, {inflight} in flight");
-                }
-
-                //If socket is closed or we have a read error, bail out
-                else if (read <= 0)
-                {
-                    //logger.LogWarning($"Read returned {read}");
+                int read = socket.Receive(ackBuffer, ackBytes, ackBuffer.Length - ackBytes, SocketFlags.None);
+                if (read <= 0)
                     return false;
-                }
 
-                else
-                    logger.LogWarning("TODO handle partial read");
+                ackBytes += read;
+                if (ackBytes == ackBuffer.Length)
+                {
+                    lastAck = BinaryPrimitives.ReadUInt32LittleEndian(ackBuffer);
+                    if(inflight > 0)
+                        inflight--;
+                    ackBytes = 0;
+                    //logger.LogInformation($"Got ACK: {lastAck}, {inflight} in flight");
+                }
             }
 
             return true;
