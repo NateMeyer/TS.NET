@@ -85,7 +85,6 @@ public class EngineManager
             }
         }
 
-        string thunderscopeSerial = "NO_SERIAL";
         switch (thunderscopeSettings.HardwareDriver.ToLower())
         {
             case "simulation":
@@ -148,7 +147,7 @@ public class EngineManager
                     }
                     deviceSerial = deviceSerial.Trim();
 
-                    if(!devices.Any(d => d.Serial.Trim() == deviceSerial))
+                    if (!devices.Any(d => d.Serial.Trim() == deviceSerial))
                     {
                         logger?.LogCritical($"ThunderScope with serial {deviceSerial} not found");
                         return false;
@@ -246,12 +245,10 @@ public class EngineManager
         // Start threads
         SemaphoreSlim startSemaphore = new(1);
 
-        DataServer? dataServer = null;
         switch (thunderscopeSettings.WaveformBufferReader)
         {
             case "DataServer":
-                dataServer = new DataServer(loggerFactory.CreateLogger(nameof(DataServer)), thunderscopeSettings, dataEndpoint!, captureBuffer, seq => scpiServer?.OnUpdateSequence(seq));
-                waveformBufferReader = dataServer;
+                waveformBufferReader = new DataServer(loggerFactory.CreateLogger(nameof(DataServer)), thunderscopeSettings, dataEndpoint!, captureBuffer, seq => scpiServer?.OnUpdateSequence(seq));
                 break;
             case "None":
                 waveformBufferReader = new EmptyWaveformBufferReader();
@@ -276,7 +273,7 @@ public class EngineManager
         scpiServer = new ScpiServer(
             logger: loggerFactory.CreateLogger(nameof(ScpiServer)),
             thunderscopeSettings,
-            thunderscopeSerial,
+            deviceSerial,
             scpiEndpoint!,
             processingControl);
         scpiServer.Start(startSemaphore);
