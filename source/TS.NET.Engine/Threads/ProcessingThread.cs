@@ -985,26 +985,27 @@ public class ProcessingThread : IThread
                                         //    SINGLE
                                         //    FORCE
                                         //    TRIG:SOURCE 1/2/3/4
-                                        if (acquisitionBuffer.SamplesInBufferPerChannel >= processingConfig.ChannelDataLength)
+                                        bool captured = false;
+                                        switch (processingConfig.ChannelDataType)
                                         {
-                                            switch (processingConfig.ChannelDataType)
-                                            {
-                                                case ThunderscopeDataType.I8:
-                                                    Capture<sbyte>(triggered: false, triggerChannelCaptureIndex: 0, captureEndIndex: sampleStartIndex + (ulong)sampleLengthPerChannel);
-                                                    break;
-                                                case ThunderscopeDataType.I16:
-                                                    Capture<short>(triggered: false, triggerChannelCaptureIndex: 0, captureEndIndex: sampleStartIndex + (ulong)sampleLengthPerChannel);
-                                                    break;
-                                            }
+                                            case ThunderscopeDataType.I8:
+                                                captured = Capture<sbyte>(triggered: false, triggerChannelCaptureIndex: 0, captureEndIndex: sampleStartIndex + (ulong)sampleLengthPerChannel);
+                                                break;
+                                            case ThunderscopeDataType.I16:
+                                                captured = Capture<short>(triggered: false, triggerChannelCaptureIndex: 0, captureEndIndex: sampleStartIndex + (ulong)sampleLengthPerChannel);
+                                                break;
+                                        }
+                                        if (captured)
+                                        {
                                             forceTriggerLatch = false;
                                             autoTimeoutTimer.Restart();     // Restart the auto timeout as a force trigger happened
+                                        }
 
-                                            if (singleTriggerLatch)         // If this was a single trigger, reset the singleTrigger & runTrigger latches
-                                            {
-                                                singleTriggerLatch = false;
-                                                Stop();
-                                                break;
-                                            }
+                                        if (captured && singleTriggerLatch)         // If this was a single trigger, reset the singleTrigger & runTrigger latches
+                                        {
+                                            singleTriggerLatch = false;
+                                            Stop();
+                                            break;
                                         }
                                     }
                                     if (processingConfig.TriggerChannel == TriggerChannel.External)
@@ -1022,16 +1023,17 @@ public class ProcessingThread : IThread
                                             for (int i = 0; i < eventTriggerResults.CaptureEndCount; i++)
                                             {
                                                 //logger.LogDebug($"Capture {eventTriggerResults.CaptureEndIndices[i]}");
+                                                bool captured = false;
                                                 switch (processingConfig.ChannelDataType)
                                                 {
                                                     case ThunderscopeDataType.I8:
-                                                        Capture<sbyte>(triggered: false, triggerChannelCaptureIndex: 0, eventTriggerResults.CaptureEndIndices[i]);
+                                                        captured = Capture<sbyte>(triggered: false, triggerChannelCaptureIndex: 0, eventTriggerResults.CaptureEndIndices[i]);
                                                         break;
                                                     case ThunderscopeDataType.I16:
-                                                        Capture<short>(triggered: false, triggerChannelCaptureIndex: 0, eventTriggerResults.CaptureEndIndices[i]);
+                                                        captured = Capture<short>(triggered: false, triggerChannelCaptureIndex: 0, eventTriggerResults.CaptureEndIndices[i]);
                                                         break;
                                                 }
-                                                if (singleTriggerLatch)         // If this was a single trigger, reset the singleTrigger & runTrigger latches
+                                                if (captured && singleTriggerLatch)         // If this was a single trigger, reset the singleTrigger & runTrigger latches
                                                 {
                                                     singleTriggerLatch = false;
                                                     Stop();
@@ -1105,16 +1107,17 @@ public class ProcessingThread : IThread
                                         {
                                             for (int i = 0; i < edgeTriggerResults.CaptureEndCount; i++)
                                             {
+                                                bool captured = false;
                                                 switch (processingConfig.ChannelDataType)
                                                 {
                                                     case ThunderscopeDataType.I8:
-                                                        Capture<sbyte>(triggered: true, triggerChannelCaptureIndex, edgeTriggerResults.CaptureEndIndices[i]);
+                                                        captured = Capture<sbyte>(triggered: true, triggerChannelCaptureIndex, edgeTriggerResults.CaptureEndIndices[i]);
                                                         break;
                                                     case ThunderscopeDataType.I16:
-                                                        Capture<short>(triggered: true, triggerChannelCaptureIndex, edgeTriggerResults.CaptureEndIndices[i]);
+                                                        captured = Capture<short>(triggered: true, triggerChannelCaptureIndex, edgeTriggerResults.CaptureEndIndices[i]);
                                                         break;
                                                 }
-                                                if (singleTriggerLatch)         // If this was a single trigger, reset the singleTrigger & runTrigger latches
+                                                if (captured && singleTriggerLatch)         // If this was a single trigger, reset the singleTrigger & runTrigger latches
                                                 {
                                                     singleTriggerLatch = false;
                                                     Stop();
@@ -1206,13 +1209,12 @@ public class ProcessingThread : IThread
             }
 
             // Locally scoped methods for deduplication
-            void Capture<T>(bool triggered, int triggerChannelCaptureIndex, ulong captureEndIndex) where T : unmanaged
+            bool Capture<T>(bool triggered, int triggerChannelCaptureIndex, ulong captureEndIndex) where T : unmanaged
             {
-                // Capture buffer should only have insufficient length when running in AUTO. NORMAL/SINGLE will throw an exception later in this method.
-                if (processingConfig.Mode == Mode.Auto && acquisitionBuffer.SamplesInBufferPerChannel < processingConfig.ChannelDataLength)
+                if (acquisitionBuffer.SamplesInBufferPerChannel < processingConfig.ChannelDataLength)
                 {
-                    logger.LogDebug("Capture skipped due to insufficient samples in buffer during AUTO");
-                    return;
+                    logger.LogDebug("Capture skipped due to insufficient samples in buffer");
+                    return false;
                 }
 
                 if (captureBufferManager.TryStartWrite(out var buffer))
@@ -1266,7 +1268,10 @@ public class ProcessingThread : IThread
                         ProcessingConfig = processingConfig
                     };
                     captureBufferManager.FinishWrite(captureMetadata);
+                    return true;
                 }
+
+                return false;
             }
 
             void StreamCapture<T>() where T : unmanaged
