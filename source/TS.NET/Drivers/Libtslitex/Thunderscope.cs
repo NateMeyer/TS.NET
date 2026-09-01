@@ -429,7 +429,7 @@ public class Thunderscope : IThunderscope
         retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
 
         if (retVal < 0)
-           throw new ThunderscopeException($"Failed to set channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
+            logger.LogCritical($"Failed to set channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
 
         
         retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
