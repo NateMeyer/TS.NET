@@ -103,7 +103,7 @@ public class AcRmsStep : Step
     {
         var pathCalibration = Utility.GetChannelPathCalibration(channelIndex, combination.PgaPreampGain, combination.PgaLadder, variables);
         var temperature = Instruments.Instance.GetThunderscopeFpgaTemp();
-        var trimDacZero = Frontend.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
+        var trimDacZero = Utility.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
 
         var branchGains = Frontend.GetAdcBranchGain(variables.Calibration, [channelIndex], rateHz);
         Instruments.Instance.SetThunderscopeBranchGains(branchGains);

@@ -66,7 +66,7 @@ public class TrimStep2 : ModalUiStep
             SigGens.Instance.SetSdgChannel([ChannelIndex]);
 
             var temperature = Instruments.Instance.GetThunderscopeFpgaTemp();
-            var trimDacZero = Frontend.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
+            var trimDacZero = Utility.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
             Instruments.Instance.SetThunderscopeCalManual50R(ChannelIndex, Attenuator, trimDacZero, pathCalibration.TrimDPot, pathCalibration.PgaPreampGain, pathCalibration.PgaLadder, ThunderscopeBandwidth.BwFull, variables.FrontEndSettlingTimeMs);
 
             var captureSamplesAtScopeRate = ((double)ArbProfile.Length / ArbProfile.SampleRateHz) * SampleRateHz;

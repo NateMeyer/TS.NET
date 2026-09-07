@@ -2,6 +2,12 @@
 
 public static class Utility
 {
+    public static ushort GetTrimDacZero(double temperature, double trimDacZeroM, double trimDacZeroC)
+    {
+        var dacValue = (int)Math.Round(Frontend.GetTrimDacZero(temperature, trimDacZeroM, trimDacZeroC));
+        return (ushort)Math.Clamp(dacValue, 0, 4095);
+    }
+
     public static FrontendPathCalibration GetChannelPathCalibration(int channelIndex, PgaPreampGain pgaPreamp, int pgaLadder, CommonVariables variables)
     {
         return variables.Calibration.Frontend[channelIndex].Path.Where(p => p.PgaPreampGain == pgaPreamp && p.PgaLadder == pgaLadder).First();

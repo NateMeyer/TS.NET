@@ -31,7 +31,7 @@ public class AdcBranchGainPhaseOffsetStep : Step
             {
                 var pathCalibration = Utility.GetChannelPathCalibration(channelIndex, pgaGain, pgaLadder, variables);
                 var temperature = Instruments.Instance.GetThunderscopeFpgaTemp();
-                var trimDacZero = Frontend.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
+                var trimDacZero = Utility.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
                 Instruments.Instance.SetThunderscopeCalManual1M(channelIndex, trimDacZero, pathCalibration.TrimDPot, pathCalibration.PgaPreampGain, pathCalibration.PgaLadder, variables.FrontEndSettlingTimeMs);
 
                 SigGens.Instance.SetSdgSine(channelIndex);

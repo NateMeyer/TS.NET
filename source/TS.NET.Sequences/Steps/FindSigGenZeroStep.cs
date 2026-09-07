@@ -21,7 +21,7 @@ public class FindSigGenZeroStep : Step
             var pathData = Utility.GetChannelPathData(channelIndex, PgaPreampGain.High, pgaLadder: 0, variables);
             var pathCalibration = Utility.GetChannelPathCalibration(channelIndex, PgaPreampGain.High, pgaLadder: 0, variables);
             var temperature = Instruments.Instance.GetThunderscopeFpgaTemp();
-            var trimDacZero = Frontend.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
+            var trimDacZero = Utility.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
             Instruments.Instance.SetThunderscopeCalManual1M(channelIndex, trimDacZero, pathCalibration.TrimDPot, pathCalibration.PgaPreampGain, pathCalibration.PgaLadder, variables.FrontEndSettlingTimeMs);
             SigGens.Instance.SetSdgChannel([channelIndex]);
             SigGens.Instance.SetSdgDc(channelIndex);

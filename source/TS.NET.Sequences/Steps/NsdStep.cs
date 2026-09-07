@@ -28,7 +28,7 @@ public class NsdStep : Step
 
             var pathCalibration = Utility.GetChannelPathCalibration(ChannelIndex, PgaPreampGain, PgaLadder, variables);
             var temperature = Instruments.Instance.GetThunderscopeFpgaTemp();
-            var trimDacZero = Frontend.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
+            var trimDacZero = Utility.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
             Instruments.Instance.SetThunderscopeFrontend(ChannelIndex, new ThunderscopeChannelFrontendManualControl
             {
                 Coupling = ThunderscopeCoupling.DC,

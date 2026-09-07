@@ -4,14 +4,9 @@ namespace TS.NET;
 
 public static class Frontend
 {
-    public static ushort GetTrimDacZero(double temperature, double trimDacZeroM, double trimDacZeroC)
+    public static double GetTrimDacZero(double temperature, double trimDacZeroM, double trimDacZeroC)
     {
-        var dacCode = (trimDacZeroM * temperature) + trimDacZeroC;
-        if (dacCode < 0)
-            dacCode = 0;
-        else if (dacCode > 4095)
-            dacCode = 4095;
-        return (ushort)dacCode;
+        return (trimDacZeroM * temperature) + trimDacZeroC;
     }
 
     /// <summary>
@@ -267,8 +262,7 @@ public static class Frontend
         // SCPI API matches most scope vendors, i.e. if input signal has 100mV offset, send CHAN1:OFFS 0.1 to cancel it out.
         var dacZero = Frontend.GetTrimDacZero(temperature, selectedPath.TrimDacZeroM, selectedPath.TrimDacZeroC);
         var dacLsbV = selectedPath.BufferInputVpp / selectedPath.TrimDacScale;
-        var dacOffset = (int)((channel.RequestedVoltOffset / gainFactor) / dacLsbV);
-        var dacValue = dacZero + dacOffset;
+        var dacValue = (int)(dacZero + ((channel.RequestedVoltOffset / gainFactor) / dacLsbV));
 
         // Note: last resort clamping of DAC value.
         if (dacValue < 0)
@@ -277,7 +271,7 @@ public static class Frontend
             dacValue = 4095;
 
         channel.ActualVoltFullScale = Frontend.CalculateConnectorInputVpp(channelIndex, sampleRateHz, frontend, selectedPath, channelLoadScale, channel.RequestedTermination, attenuator, beta);
-        channel.ActualVoltOffset = Math.Round((dacOffset * dacLsbV) * gainFactor, 4);
+        channel.ActualVoltOffset = (dacValue - dacZero) * dacLsbV * gainFactor;
         Frontend.CalculateAllowableOffsetRangeV(logger, frontend, selectedPath, attenuator, temperature, out var minOffsetV, out var maxOffsetV);
         channel.MinVoltOffset = minOffsetV;
         channel.MaxVoltOffset = maxOffsetV;

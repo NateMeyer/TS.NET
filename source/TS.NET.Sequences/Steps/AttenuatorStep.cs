@@ -25,7 +25,7 @@ public class AttenuatorStep : Step
 
             var pathCalibration = Utility.GetChannelPathCalibration(channelIndex, PgaPreampGain.Low, pgaLadder: 7, variables);
             var temperature = Instruments.Instance.GetThunderscopeFpgaTemp();
-            var trimDacZero = Frontend.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
+            var trimDacZero = Utility.GetTrimDacZero(temperature, pathCalibration.TrimDacZeroM, pathCalibration.TrimDacZeroC);
 
 
             const uint frequencyHz = 1000;
