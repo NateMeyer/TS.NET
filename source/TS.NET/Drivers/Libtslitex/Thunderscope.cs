@@ -16,14 +16,13 @@ public class Thunderscope : IThunderscope
     private bool[] channelManualOverride;
     private Calibration calibration;
     private ThunderscopeChannelFrontend[] channelFrontend;
+    private ThunderscopeLiteXDevice tsInfo;
 
     uint cachedSampleRateHz = 1_000_000_000;
     AdcResolution cachedSampleResolution = AdcResolution.EightBit;
     AdcChannelMode cachedAdcChannelMode = AdcChannelMode.Single;
     ThunderscopeRefClockMode cachedRefClockMode = ThunderscopeRefClockMode.Disabled;
     uint cachedRefClockFrequencyHz = 10_000_000;
-
-    private bool beta = false;
 
     private CancellationTokenSource? cancelTokenSource = null;
     private Task? taskMonitoring = null;
@@ -50,6 +49,7 @@ public class Thunderscope : IThunderscope
         channelManualOverride = new bool[4];
         calibration = new Calibration();
         channelFrontend = new ThunderscopeChannelFrontend[4];
+        tsInfo = new ThunderscopeLiteXDevice(0, 0, 0, 0, "", "", "", "", "", "");
     }
 
     public void Open(uint devIndex)
@@ -64,47 +64,36 @@ public class Thunderscope : IThunderscope
         open = true;
     }
 
-    public void Configure(ThunderscopeHardwareConfig initialHardwareConfiguration, Calibration calibration, string hardwareRevision)
+    public void SetCalibration(Calibration calibration)
     {
         CheckOpen();
 
-        if (hardwareRevision.Equals("Rev4.1", StringComparison.InvariantCultureIgnoreCase))
-            beta = true;
-
-        //SetAdcCalibration(initialHardwareConfiguration.AdcCalibration);
-        //for (int chan = 0; chan < 4; chan++)
-        //{
-        //    SetChannelCalibration(chan, initialHardwareConfiguration.Calibration[chan]);
-        //}
+        SetAdcCalibration(calibration.Adc);
+        for (int chan = 0; chan < 4; chan++)
+        {
+            SetFrontendCalibration(chan, calibration.Frontend[chan]);
+        }
         this.calibration = calibration;
+    }
+    public void Configure(ThunderscopeHardwareConfig initialHardwareConfiguration)
+    {
+        CheckOpen();
+
         GetStatus();
 
         for (int chan = 0; chan < 4; chan++)
         {
             channelFrontend[chan] = initialHardwareConfiguration.Frontend[chan];
             var chanEnabled = ((initialHardwareConfiguration.Acquisition.EnabledChannels >> chan) & 0x01) > 0;
-            SetChannelEnable(chan, chanEnabled, updateFrontends: false);
+            SetChannelEnable(chan, chanEnabled);
         }
 
-        SetSampleMode(initialHardwareConfiguration.Acquisition.SampleRateHz, initialHardwareConfiguration.Acquisition.Resolution, updateFrontends: false);
+        SetSampleMode(initialHardwareConfiguration.Acquisition.SampleRateHz, initialHardwareConfiguration.Acquisition.Resolution);
         UpdateFrontends();
         SetExtSyncMode(initialHardwareConfiguration.ExtSyncMode);
         SetRefClockMode(initialHardwareConfiguration.RefClockMode);
         SetRefClockFrequency(initialHardwareConfiguration.RefClockFrequencyHz);
 
-        var temperature = GetStatus().FpgaTemp;
-        var frontend = calibration.Frontend[0];
-        foreach (var path in frontend.Path)
-        {
-            Frontend.CalculateAllowableOffsetRangeV(logger, frontend, path, attenuator: false, temperature, out var minOffsetV, out var maxOffsetV);
-            logger.LogDebug($"Input range: {path.BufferInputVpp:F3}Vpp, input offset: {minOffsetV:F3}V to {maxOffsetV:F3}V [{path.PgaPreampGain}, {path.PgaLadder}, attenuator off]");
-        }
-
-        foreach (var path in frontend.Path)
-        {
-            Frontend.CalculateAllowableOffsetRangeV(logger, frontend, path, attenuator: true, temperature, out var minOffsetV, out var maxOffsetV);
-            logger.LogDebug($"Input range: {path.BufferInputVpp * frontend.AttenuatorScale:F3}Vpp, input offset: {minOffsetV:F3}V to {maxOffsetV:F3}V [{path.PgaPreampGain}, {path.PgaLadder}, attenuator on]");
-        }
     }
 
     public void Close()
@@ -243,42 +232,31 @@ public class Thunderscope : IThunderscope
     {
         CheckOpen();
 
-        //var channel = new ThunderscopeChannelFrontend();
-        //var tsChannel = new Interop.tsChannelParam_t();
+        var channel = new ThunderscopeChannelFrontend();
+        var tsChannel = new Interop.tsChannelParam_t();
 
-        //var retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
-        //if (retVal < 0)
-        //    throw new ThunderscopeException($"Failed to get channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
+        var retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
+        if (retVal < 0)
+            throw new ThunderscopeException($"Failed to get channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
 
-        //channel.RequestedVoltFullScale = requestedChannelVoltScale[channelIndex];
-        //channel.ActualVoltFullScale = (double)tsChannel.volt_scale_uV / 1000000.0;
-        //channel.RequestedVoltOffset = requestedChannelVoltOffset[channelIndex];
-        //channel.ActualVoltOffset = (double)tsChannel.volt_offset_uV / 1000000.0;
-        //channel.Coupling = (tsChannel.coupling == 1) ? ThunderscopeCoupling.AC : ThunderscopeCoupling.DC;
-        //channel.Termination = (tsChannel.term == 1) ? ThunderscopeTermination.FiftyOhm : ThunderscopeTermination.OneMegaohm;
-        //channel.Bandwidth = (tsChannel.bandwidth == 750) ? ThunderscopeBandwidth.Bw750M :
-        //                        (tsChannel.bandwidth == 650) ? ThunderscopeBandwidth.Bw650M :
-        //                        (tsChannel.bandwidth == 350) ? ThunderscopeBandwidth.Bw350M :
-        //                        (tsChannel.bandwidth == 200) ? ThunderscopeBandwidth.Bw200M :
-        //                        (tsChannel.bandwidth == 100) ? ThunderscopeBandwidth.Bw100M :
-        //                        (tsChannel.bandwidth == 20) ? ThunderscopeBandwidth.Bw20M :
-        //                        ThunderscopeBandwidth.BwFull;
+        channel.RequestedVoltFullScale = channelFrontend[channelIndex].RequestedVoltFullScale;
+        channel.ActualVoltFullScale = tsChannel.volt_scale_uV / 1000000.0;
+        channel.RequestedVoltOffset = channelFrontend[channelIndex].RequestedVoltOffset;
+        channel.ActualVoltOffset = tsChannel.volt_offset_uV / 1000000.0;
+        channel.Coupling = (tsChannel.coupling == 1) ? ThunderscopeCoupling.AC : ThunderscopeCoupling.DC;
+        channel.RequestedTermination = channelFrontend[channelIndex].RequestedTermination;
+        channel.ActualTermination = (tsChannel.term == 1) ? ThunderscopeTermination.FiftyOhm : ThunderscopeTermination.OneMegaohm;
+        channel.Bandwidth = tsChannel.bandwidth switch
+        {
+            750 => ThunderscopeBandwidth.Bw750M,
+            650 => ThunderscopeBandwidth.Bw650M,
+            350 => ThunderscopeBandwidth.Bw350M,
+            200 => ThunderscopeBandwidth.Bw200M,
+            100 => ThunderscopeBandwidth.Bw100M,
+            20 => ThunderscopeBandwidth.Bw20M,
+            _ => ThunderscopeBandwidth.BwFull
+        };
 
-        //return channel;
-
-
-        var channel = channelFrontend[channelIndex];
-        //var tsChannel = new Interop.tsChannelParam_t();
-
-        //var retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
-        //if (retVal < 0)
-        //    throw new ThunderscopeException($"Failed to get channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
-        //channel.Termination = tsChannel.term switch
-        //{
-        //    0 => ThunderscopeTermination.OneMegaohm,
-        //    1 => ThunderscopeTermination.FiftyOhm,
-        //    _ => throw new NotImplementedException()
-        //};
         return channel;
     }
 
@@ -312,9 +290,12 @@ public class Thunderscope : IThunderscope
     {
         var acquisitionConfig = new ThunderscopeAcquisitionConfig();
         var channelCount = channelsEnabled.Length;
-        acquisitionConfig.AdcChannelMode = (channelCount == 1) ? AdcChannelMode.Single :
-                    (channelCount == 2) ? AdcChannelMode.Dual :
-                    AdcChannelMode.Quad;
+        acquisitionConfig.AdcChannelMode = channelCount switch
+        {
+            1 => AdcChannelMode.Single,
+            2 => AdcChannelMode.Dual,
+            _ => AdcChannelMode.Quad
+        };
         for (int i = 0; i < 4; i++)
         {
             if (channelsEnabled.Contains((byte)i))
@@ -327,15 +308,42 @@ public class Thunderscope : IThunderscope
         return acquisitionConfig;
     }
 
-    //public ThunderscopeChannelCalibration GetChannelCalibration(int channelIndex)
-    //{
-    //    CheckOpen();
+    public FrontendCalibration GetFrontendCalibration(int channelIndex)
+    {
+        CheckOpen();
 
-    //    if (channelIndex >= 4 || channelIndex < 0)
-    //        throw new ThunderscopeException($"Invalid Channel Index {channelIndex}");
+        var afeCalibration = FrontendCalibration.Default(channelIndex);
+        var tsCal = new Interop.tsFrontendCalibration_t();
 
-    //    return channelCalibration[channelIndex];
-    //}
+        if (channelIndex >= 4 || channelIndex < 0)
+            throw new ThunderscopeException($"Invalid Channel Index {channelIndex}");
+
+        var retVal = Interop.GetAFECalibration(tsHandle, (uint)channelIndex, out tsCal);
+
+        if (retVal < 0)
+            throw new ThunderscopeException($"Failed to get libtslitex AFE{channelIndex} Calibration ({GetLibraryReturnString(retVal)})");
+
+        for (int i = 0; i < 11; i++)
+        {
+            afeCalibration.Path[i].PgaPreampGain = PgaPreampGain.High;
+            afeCalibration.Path[i].PgaLadder = (byte)i;
+            afeCalibration.Path[i].TrimDPot = (byte)tsCal.highPgaPathCal[i].trimDPot;
+            afeCalibration.Path[i].TrimDacScale = tsCal.highPgaPathCal[i].trimOffsetDacScale;
+            afeCalibration.Path[i].TrimDacZeroC = tsCal.highPgaPathCal[i].trimOffsetDacZeroC;
+            afeCalibration.Path[i].TrimDacZeroM = tsCal.highPgaPathCal[i].trimOffsetDacZeroM;
+            afeCalibration.Path[i].BufferInputVpp = tsCal.highPgaPathCal[i].bufferInputVpp;
+
+            afeCalibration.Path[11 + i].PgaPreampGain = PgaPreampGain.Low;
+            afeCalibration.Path[11 + i].PgaLadder = (byte)i;
+            afeCalibration.Path[11 + i].TrimDPot = (byte)tsCal.lowPgaPathCal[i].trimDPot;
+            afeCalibration.Path[11 + i].TrimDacScale = tsCal.lowPgaPathCal[i].trimOffsetDacScale;
+            afeCalibration.Path[11 + i].TrimDacZeroC = tsCal.lowPgaPathCal[i].trimOffsetDacZeroC;
+            afeCalibration.Path[11 + i].TrimDacZeroM = tsCal.lowPgaPathCal[i].trimOffsetDacZeroM;
+            afeCalibration.Path[11 + i].BufferInputVpp = tsCal.lowPgaPathCal[i].bufferInputVpp;
+        }
+        afeCalibration.AttenuatorScale = tsCal.attenuatorScale;
+        return afeCalibration;
+    }
 
     public ThunderscopeLiteXStatus GetStatus()
     {
@@ -365,7 +373,7 @@ public class Thunderscope : IThunderscope
 
     public void SetRate(ulong sampleRateHz)
     {
-        SetSampleMode(sampleRateHz, cachedSampleResolution, updateFrontends: true);
+        SetSampleMode(sampleRateHz, cachedSampleResolution);
     }
 
     public void SetResolution(AdcResolution resolution)
@@ -374,108 +382,218 @@ public class Thunderscope : IThunderscope
         if (resolution == AdcResolution.TwelveBit && sampleRateHz > 660_000_000)
             sampleRateHz = 660_000_000;
 
-        SetSampleMode(sampleRateHz, resolution, updateFrontends: true);
+        SetSampleMode(sampleRateHz, resolution);
     }
 
     public void SetChannelFrontend(int channelIndex, ThunderscopeChannelFrontend channel)
     {
         CheckOpen();
 
-        //var tsChannel = new Interop.tsChannelParam_t();
-        //var retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
+        var tsChannel = new Interop.tsChannelParam_t();
+        var retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
 
-        //if (retVal < 0)
-        //    throw new ThunderscopeException($"Failed to get channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
+        if (retVal < 0)
+            throw new ThunderscopeException($"Failed to get channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
 
-        //tsChannel.volt_scale_uV = (uint)(channel.RequestedVoltFullScale * 1000000);
-        //tsChannel.volt_offset_uV = (int)(channel.RequestedVoltOffset * 1000000);
-        //tsChannel.coupling = (channel.Coupling == ThunderscopeCoupling.DC) ? (byte)0 : (byte)1;
-        //tsChannel.term = (channel.Termination == ThunderscopeTermination.OneMegaohm) ? (byte)0 : (byte)1;
-        //tsChannel.bandwidth = channel.Bandwidth switch
-        //{
-        //    ThunderscopeBandwidth.BwFull => 900,
-        //    ThunderscopeBandwidth.Bw750M => 750,
-        //    ThunderscopeBandwidth.Bw650M => 650,
-        //    ThunderscopeBandwidth.Bw350M => 350,
-        //    ThunderscopeBandwidth.Bw200M => 200,
-        //    ThunderscopeBandwidth.Bw100M => 100,
-        //    ThunderscopeBandwidth.Bw20M => 20,
-        //    _ => throw new NotImplementedException()
-        //};
+        tsChannel.volt_scale_uV = (uint)(channel.RequestedVoltFullScale * 1000000);
+        tsChannel.volt_offset_uV = (int)(channel.RequestedVoltOffset * 1000000);
+        tsChannel.coupling = (channel.Coupling == ThunderscopeCoupling.DC) ? (byte)0 : (byte)1;
+        tsChannel.term = (channel.RequestedTermination == ThunderscopeTermination.OneMegaohm) ? (byte)0 : (byte)1;
+        tsChannel.bandwidth = channel.Bandwidth switch
+        {
+            ThunderscopeBandwidth.BwFull => 900,
+            ThunderscopeBandwidth.Bw750M => 750,
+            ThunderscopeBandwidth.Bw650M => 650,
+            ThunderscopeBandwidth.Bw350M => 350,
+            ThunderscopeBandwidth.Bw200M => 200,
+            ThunderscopeBandwidth.Bw100M => 100,
+            ThunderscopeBandwidth.Bw20M => 20,
+            _ => throw new NotImplementedException()
+        };
 
-        //retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
+        logger.LogInformation($"Configure channel {channelIndex}: scale {tsChannel.volt_scale_uV}uVpp, offset {tsChannel.volt_offset_uV}uV, term {tsChannel.term}");
 
-        //if (retVal < 0)
-        //    throw new ThunderscopeException($"Failed to set channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
+        retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
 
-        //requestedChannelVoltScale[channelIndex] = channel.RequestedVoltFullScale;
-        //requestedChannelVoltOffset[channelIndex] = channel.RequestedVoltOffset;
+        // libtslitex will return an error code if the requested channel configuration is not valid
+        // so consumers of libtslitex have the luxury of knowing immediately if there is an issue,
+        // whereas the SCPI API should not return error codes for commands so fall back to safe configurations if possible.
 
-        var loadScales = Frontend.GetAllLoadScales(calibration, channelsEnabled, cachedSampleRateHz);
-        SetChannelFrontend(channelIndex, channel, loadScales[channelIndex]);
+        if (retVal < 0 && channel.RequestedTermination == ThunderscopeTermination.FiftyOhm)
+        {
+            logger.LogWarning($"Failed to set channel {channelIndex} configuration; retrying with 1M termination ({GetLibraryReturnString(retVal)})");
+            tsChannel.term = 0;
+            retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
+        }
+
+        // This fallback isn't elegant, future improvements could calculate the best effort configuration that gets close to requested configuration
+        if (retVal < 0)
+        {
+            logger.LogWarning($"Failed to set channel {channelIndex} configuration; retrying with 40V range and 0V offset ({GetLibraryReturnString(retVal)})");
+            tsChannel.volt_scale_uV = 40_000_000;
+            tsChannel.volt_offset_uV = 0;
+            retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
+        }
+
+        if (retVal < 0)
+            logger.LogCritical($"Failed to set channel {channelIndex} configuration ({GetLibraryReturnString(retVal)})");
+
+
+        retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
+
+        if (retVal < 0)
+            throw new ThunderscopeException($"Failed to get channel {channelIndex} configuration ({GetLibraryReturnString(retVal)})");
+
+        channelFrontend[channelIndex].ActualTermination = (tsChannel.term == 0) ? ThunderscopeTermination.OneMegaohm : ThunderscopeTermination.FiftyOhm;
+        channelFrontend[channelIndex].ActualVoltFullScale = tsChannel.volt_scale_uV * 1000000.0;
+        channelFrontend[channelIndex].ActualVoltOffset = tsChannel.volt_offset_uV * 1000000.0;
+        channelFrontend[channelIndex].RequestedVoltFullScale = channel.RequestedVoltFullScale;
+        channelFrontend[channelIndex].RequestedVoltOffset = channel.RequestedVoltOffset;
+        channelFrontend[channelIndex].RequestedTermination = channel.RequestedTermination;
+        channelFrontend[channelIndex].Bandwidth = channel.Bandwidth;
+        channelFrontend[channelIndex].Coupling = channel.Coupling;
+
+        channelManualOverride[channelIndex] = false;            // SetChannelManualControl sets to true, so immediately set to false
     }
 
     public void SetAdcBranchGainManualControl(byte[] branchGain)
     {
         CheckOpen();
 
-        var tsCal = new Interop.tsAdcCalibration_t();
-        tsCal.branchFineGain[0] = branchGain[0];
-        tsCal.branchFineGain[1] = branchGain[1];
-        tsCal.branchFineGain[2] = branchGain[2];
-        tsCal.branchFineGain[3] = branchGain[3];
-        tsCal.branchFineGain[4] = branchGain[4];
-        tsCal.branchFineGain[5] = branchGain[5];
-        tsCal.branchFineGain[6] = branchGain[6];
-        tsCal.branchFineGain[7] = branchGain[7];
+        var tsCal = new byte[8];
+        tsCal[0] = branchGain[0];
+        tsCal[1] = branchGain[1];
+        tsCal[2] = branchGain[2];
+        tsCal[3] = branchGain[3];
+        tsCal[4] = branchGain[4];
+        tsCal[5] = branchGain[5];
+        tsCal[6] = branchGain[6];
+        tsCal[7] = branchGain[7];
 
-        Interop.SetAdcCalibration(tsHandle, in tsCal);
+        Interop.SetAdcManualFineGain(tsHandle, in tsCal);
     }
 
-    //public void SetChannelCalibration(int channelIndex, ThunderscopeChannelCalibration channelCalibration)
-    //{
-    //    CheckOpen();
+    public void SetFrontendCalibration(int channelIndex, FrontendCalibration channelCalibration)
+    {
+        CheckOpen();
 
-    //    if (channelIndex >= 4 || channelIndex < 0)
-    //        throw new ThunderscopeException($"Invalid Channel Index {channelIndex}");
+        if (channelIndex >= 4 || channelIndex < 0)
+            throw new ThunderscopeException($"Invalid Channel Index {channelIndex}");
 
-    //    var tsCal = new Interop.tsChannelCalibration_t
-    //    {
-    //        //buffer_uV = (int)(channelCalibration.BufferOffset * 1000000),
-    //        //bias_uV = (int)(channelCalibration.BiasVoltage * 1000000),
-    //        //attenuatorGain1M_mdB = (int)(channelCalibration.AttenuatorGain1MOhm * 1000),
-    //        //attenuatorGain50_mdB = (int)(channelCalibration.AttenuatorGain50Ohm * 1000),
-    //        //bufferGain_mdB = (int)(channelCalibration.BufferGain * 1000),
-    //        //trimRheostat_range = (int)channelCalibration.TrimResistorOhms,
-    //        //preampLowGainError_mdB = (int)(channelCalibration.PgaLowGainError * 1000),
-    //        //preampHighGainError_mdB = (int)(channelCalibration.PgaHighGainError * 1000),
-    //        //preampLowOffset_uV = (int)(channelCalibration.PgaLowOffsetVoltage * 1000000),
-    //        //preampHighOffset_uV = (int)(channelCalibration.PgaHighOffsetVoltage * 1000000),
-    //        //preampOutputGainError_mdB = (int)(channelCalibration.PgaOutputGainError * 1000),
-    //        //preampInputBias_uA = (int)channelCalibration.PgaInputBiasCurrent,
-    //    };
-    //    //tsCal.preampAttenuatorGain_mdB[0] = (int)channelCalibration.PgaAttenuatorGain0;
-    //    //tsCal.preampAttenuatorGain_mdB[1] = (int)channelCalibration.PgaAttenuatorGain1;
-    //    //tsCal.preampAttenuatorGain_mdB[2] = (int)channelCalibration.PgaAttenuatorGain2;
-    //    //tsCal.preampAttenuatorGain_mdB[3] = (int)channelCalibration.PgaAttenuatorGain3;
-    //    //tsCal.preampAttenuatorGain_mdB[4] = (int)channelCalibration.PgaAttenuatorGain4;
-    //    //tsCal.preampAttenuatorGain_mdB[5] = (int)channelCalibration.PgaAttenuatorGain5;
-    //    //tsCal.preampAttenuatorGain_mdB[6] = (int)channelCalibration.PgaAttenuatorGain6;
-    //    //tsCal.preampAttenuatorGain_mdB[7] = (int)channelCalibration.PgaAttenuatorGain7;
-    //    //tsCal.preampAttenuatorGain_mdB[8] = (int)channelCalibration.PgaAttenuatorGain8;
-    //    //tsCal.preampAttenuatorGain_mdB[9] = (int)channelCalibration.PgaAttenuatorGain9;
-    //    //tsCal.preampAttenuatorGain_mdB[10] = (int)channelCalibration.PgaAttenuatorGain10;
+        var tsCal = new Interop.tsFrontendCalibration_t();
 
-    //    this.channelCalibration[channelIndex] = channelCalibration;
-    //    Interop.SetCalibration(tsHandle, (uint)channelIndex, in tsCal);
-    //}
+        foreach (var path in channelCalibration.Path)
+        {
+            if (path.PgaPreampGain == PgaPreampGain.High)
+            {
+                tsCal.highPgaPathCal[path.PgaLadder].trimDPot = path.TrimDPot;
+                tsCal.highPgaPathCal[path.PgaLadder].trimOffsetDacZeroC = path.TrimDacZeroC;
+                tsCal.highPgaPathCal[path.PgaLadder].trimOffsetDacZeroM = path.TrimDacZeroM;
+                tsCal.highPgaPathCal[path.PgaLadder].trimOffsetDacScale = path.TrimDacScale;
+                tsCal.highPgaPathCal[path.PgaLadder].bufferInputVpp = path.BufferInputVpp;
+            }
+            else
+            {
+                tsCal.lowPgaPathCal[path.PgaLadder].trimDPot = path.TrimDPot;
+                tsCal.lowPgaPathCal[path.PgaLadder].trimOffsetDacZeroC = path.TrimDacZeroC;
+                tsCal.lowPgaPathCal[path.PgaLadder].trimOffsetDacZeroM = path.TrimDacZeroM;
+                tsCal.lowPgaPathCal[path.PgaLadder].trimOffsetDacScale = path.TrimDacScale;
+                tsCal.lowPgaPathCal[path.PgaLadder].bufferInputVpp = path.BufferInputVpp;
+            }
+        }
 
-    public void SetChannelEnable(int channelIndex, bool enabled) => SetChannelEnable(channelIndex, enabled, updateFrontends: true);
+        tsCal.attenuatorScale = channelCalibration.AttenuatorScale;
+
+        var retVal = Interop.SetAfeCalibration(tsHandle, (uint)channelIndex, in tsCal);
+        if (retVal < 0)
+            throw new ThunderscopeException($"Failed to set libtslitex AFE{channelIndex} Calibration ({GetLibraryReturnString(retVal)})");
+
+    }
+
+    public void SetAdcCalibration(AdcCalibration adcCalibration)
+    {
+        CheckOpen();
+
+        var tsAdcCal = new Interop.tsAdcCalibration_t();
+        for (int i = 0; i < adcCalibration.LoadScale.Length; i++)
+        {
+            tsAdcCal.loadCal[i].channels = (uint)adcCalibration.LoadScale[i].Channel.Aggregate(0, (current, chan) => 1 << chan);
+            for (int j = 0; j < adcCalibration.LoadScale[i].RateScale.Length; j++)
+            {
+                tsAdcCal.loadCal[i].conf[j].rate = adcCalibration.LoadScale[i].RateScale[j].Rate;
+                for (int k = 0; k < adcCalibration.LoadScale[i].RateScale[j].Scale.Length; k++)
+                    tsAdcCal.loadCal[i].conf[j].scale[k] = adcCalibration.LoadScale[i].RateScale[j].Scale[k];
+            }
+        }
+        for (int i = 0; i < adcCalibration.BranchGain.Length; i++)
+        {
+            tsAdcCal.branchFineGain[i].channels = (uint)adcCalibration.BranchGain[i].Channel.Aggregate(0, (current, chan) => 1 << chan);
+            for (int j = 0; j < adcCalibration.BranchGain[i].RateGain.Length; j++)
+            {
+                tsAdcCal.branchFineGain[i].conf[j].rate = adcCalibration.BranchGain[i].RateGain[j].Rate;
+                for (int k = 0; k < adcCalibration.BranchGain[i].RateGain[j].Gain.Length; k++)
+                    tsAdcCal.branchFineGain[i].conf[j].gain[k] = (byte)adcCalibration.BranchGain[i].RateGain[j].Gain[k];
+            }
+        }
+    }
+
+    public AdcCalibration GetAdcCalibration()
+    {
+        var adcCal = AdcCalibration.Default();
+        var tsAdcCal = new Interop.tsAdcCalibration_t();
+        if (Interop.GetAdcCalibration(tsHandle, out tsAdcCal) == 0)
+        {
+            // Convert Load Scale calibration
+            for (int load = 0; load < 11; load++)
+            {
+                var channelCount = 0;
+                for (int i = 0; i < 4; i++)
+                {
+                    if ((tsAdcCal.loadCal[load].channels & (1 << i)) != 0)
+                    {
+                        adcCal.LoadScale[load].Channel[channelCount] = i;
+                        channelCount++;
+                    }
+                }
+                for (int rateIdx = 0; rateIdx < 8; rateIdx++)
+                {
+                    adcCal.LoadScale[load].RateScale[rateIdx].Rate = tsAdcCal.loadCal[load].conf[rateIdx].rate;
+                    for (int i = 0; i < channelCount; i++)
+                    {
+                        adcCal.LoadScale[load].RateScale[rateIdx].Scale[i] = tsAdcCal.loadCal[load].conf[rateIdx].scale[i];
+                    }
+                }
+            }
+            // Convert Branch Fine Gain calibration
+            for (int gain = 0; gain < 11; gain++)
+            {
+                var channelCount = 0;
+                for (int i = 0; i < 4; i++)
+                {
+                    if ((tsAdcCal.branchFineGain[gain].channels & (1 << i)) != 0)
+                    {
+                        adcCal.BranchGain[gain].Channel[channelCount] = i;
+                        channelCount++;
+                    }
+                }
+                for (int rateIdx = 0; rateIdx < 8; rateIdx++)
+                {
+                    adcCal.BranchGain[gain].RateGain[rateIdx].Rate = tsAdcCal.branchFineGain[gain].conf[rateIdx].rate;
+                    for (int i = 0; i < 8; i++)
+                    {
+                        adcCal.BranchGain[gain].RateGain[rateIdx].Gain[i] = tsAdcCal.branchFineGain[gain].conf[rateIdx].gain[i];
+                    }
+                }
+            }
+        }
+
+        return adcCal;
+    }
 
     /// <summary>
     /// Intended for use by testbench/calibration routines that use SetChannelManualControl
     /// </summary>
-    public void SetChannelEnable(int channelIndex, bool enabled, bool updateFrontends)
+    public void SetChannelEnable(int channelIndex, bool enabled)
     {
         CheckOpen();
 
@@ -504,10 +622,6 @@ public class Thunderscope : IThunderscope
         {
             channelsEnabled = channelsEnabled.Where(c => c != channelIndex).ToArray();
         }
-
-        // There is a channel-count vs. scale relationship so update frontends
-        if (updateFrontends)
-            UpdateFrontends();
 
         if (restart)
             Start();
@@ -669,35 +783,16 @@ public class Thunderscope : IThunderscope
         }
     }
 
-    private void SetChannelFrontend(int channelIndex, ThunderscopeChannelFrontend channel, double channelLoadScale)
-    {
-        CheckOpen();
-
-        lastFrontendUpdateTemp = GetStatus().FpgaTemp;
-        var frontend = calibration.Frontend[channelIndex];
-
-        var calculatedChannel = Frontend.CalculateFrontend(logger, channelIndex, channel, frontend, channelLoadScale, cachedSampleRateHz, lastFrontendUpdateTemp, beta, out var manualControl);
-        SetChannelManualControl(channelIndex, manualControl);
-        channelManualOverride[channelIndex] = false;            // SetChannelManualControl sets to true, so immediately set to false
-        channelFrontend[channelIndex] = calculatedChannel;
-    }
-
     private void UpdateFrontends()
     {
-        GetStatus();    // Update cachedSampleRateHz & cachedSampleResolution
-
-        var loadScales = Frontend.GetAllLoadScales(calibration, channelsEnabled, cachedSampleRateHz);
-        for (int i = 0; i < channelFrontend.Length; i++)
+        for (int channelIndex = 0; channelIndex < 4; channelIndex++)
         {
             // Update all frontends that aren't under manual override, even for disabled channels (so relays actuate when expected)
-            if (!channelManualOverride[i])
+            if (!channelManualOverride[channelIndex])
             {
-                //Console.WriteLine($"Updating channel {i} frontend with load scale {loadScales[i]:F3}");
-                SetChannelFrontend(i, channelFrontend[i], loadScales[i]);
+                SetChannelFrontend(channelIndex, channelFrontend[channelIndex]);
             }
         }
-        var branchGains = Frontend.GetAdcBranchGain(calibration, channelsEnabled, cachedSampleRateHz);
-        SetAdcBranchGainManualControl(branchGains);
     }
 
     private void CheckOpen()
@@ -720,7 +815,7 @@ public class Thunderscope : IThunderscope
         };
     }
 
-    private void SetSampleMode(ulong sampleRateHz, AdcResolution resolution, bool updateFrontends)
+    private void SetSampleMode(ulong sampleRateHz, AdcResolution resolution)
     {
         CheckOpen();
 
@@ -737,9 +832,6 @@ public class Thunderscope : IThunderscope
         };
         var retVal = Interop.SetSampleMode(tsHandle, (uint)sampleRateHz, format);
 
-        // There is a rate vs. scale relationship so update frontends
-        if (updateFrontends)
-            UpdateFrontends();
 
         if (retVal == -2)
             logger.LogTrace($"Failed to set sample rate ({sampleRateHz}): {GetLibraryReturnString(retVal)}");
@@ -770,11 +862,8 @@ public class Thunderscope : IThunderscope
 
                     if (diff > tempDelta)
                     {
-                        for (int channelIndex = 0; channelIndex < 4; channelIndex++)
-                        {
-                            var frontend = GetChannelFrontend(channelIndex);
-                            SetChannelFrontend(channelIndex, frontend);         // Updates lastFrontendUpdateTemp
-                        }
+                        UpdateFrontends();
+                        lastFrontendUpdateTemp = currentTemp;
                     }
                 }
 

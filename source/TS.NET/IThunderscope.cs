@@ -6,10 +6,12 @@
         void Stop();
         bool Running();
         ThunderscopeChannelFrontend GetChannelFrontend(int channelIndex);
-        //ThunderscopeChannelCalibration GetChannelCalibration(int channelIndex);
+        FrontendCalibration GetFrontendCalibration(int channelIndex);
+        AdcCalibration GetAdcCalibration();
         void SetChannelEnable(int channelIndex, bool enabled);
         void SetChannelFrontend(int channelIndex, ThunderscopeChannelFrontend channel);
-        //void SetChannelCalibration(int channelIndex, ThunderscopeChannelCalibration channelCalibration);
+        void SetFrontendCalibration(int channelIndex, FrontendCalibration channelCalibration);
+        void SetAdcCalibration(AdcCalibration adcCalibration);
         void Read(ThunderscopeMemory data);
         bool TryRead(Span<byte> data, out ulong sampleStartIndex, out int sampleLengthPerChannel);
         ThunderscopeHardwareConfig GetConfiguration();
