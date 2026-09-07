@@ -148,7 +148,7 @@ public class EngineManager
                     }
                     deviceSerial = deviceSerial.Trim();
 
-                    if(!devices.Any(d => d.Serial.Trim() == deviceSerial))
+                    if (!devices.Any(d => d.Serial.Trim() == deviceSerial))
                     {
                         logger?.LogCritical($"ThunderScope with serial {deviceSerial} not found");
                         return false;

@@ -167,22 +167,22 @@
         {
             throw new NotImplementedException();
         }
-        public FrontendCalibration GetChannelCalibration(int channelIndex)
+        public FrontendCalibration GetFrontendCalibration(int channelIndex)
         {
             throw new NotImplementedException();
         }
-        public void SetChannelCalibration(int channelIndex, FrontendCalibration channelCalibration)
+        public void SetFrontendCalibration(int channelIndex, FrontendCalibration channelCalibration)
         {
             throw new NotImplementedException();
         }
-        
+
         public AdcCalibration GetAdcCalibration()
         {
             throw new NotImplementedException();
         }
         public void SetAdcCalibration(AdcCalibration adcCalibration)
         {
-            throw new NotImplementedException();    
+            throw new NotImplementedException();
         }
     }
 }

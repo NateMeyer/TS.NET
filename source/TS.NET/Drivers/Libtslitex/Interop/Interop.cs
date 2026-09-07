@@ -98,7 +98,7 @@ namespace TS.NET.Driver.Libtslitex
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct tsChannelCalibration_t
+        public struct tsFrontendCalibration_t
         {
             public double attenuatorScale;
             [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 11)]
@@ -106,9 +106,11 @@ namespace TS.NET.Driver.Libtslitex
             [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 11)]
             public tsAfePathCalibration_s[] lowPgaPathCal;
 
-            public tsChannelCalibration_t() { 
+            public tsFrontendCalibration_t()
+            {
                 highPgaPathCal = new tsAfePathCalibration_s[11];
-                lowPgaPathCal = new tsAfePathCalibration_s[11]; }
+                lowPgaPathCal = new tsAfePathCalibration_s[11];
+            }
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -118,9 +120,9 @@ namespace TS.NET.Driver.Libtslitex
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 4)]
             public double[] scale;
 
-            public tsAdcLoad_t() { scale = new double[4];}
+            public tsAdcLoad_t() { scale = new double[4]; }
         }
-        
+
         [StructLayout(LayoutKind.Sequential)]
         public struct tsAdcLoadCal_t
         {
@@ -128,7 +130,8 @@ namespace TS.NET.Driver.Libtslitex
             [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 8)]
             public tsAdcLoad_t[] conf;
 
-            public tsAdcLoadCal_t() {
+            public tsAdcLoadCal_t()
+            {
                 conf = new tsAdcLoad_t[8];
                 for (var cal = 0; cal < 8; cal++)
                 {
@@ -136,7 +139,7 @@ namespace TS.NET.Driver.Libtslitex
                 }
             }
         }
-        
+
         [StructLayout(LayoutKind.Sequential)]
         public struct tsAdcGain_t
         {
@@ -144,9 +147,9 @@ namespace TS.NET.Driver.Libtslitex
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
             public byte[] gain;
 
-            public tsAdcGain_t() { gain = new byte[8];}
+            public tsAdcGain_t() { gain = new byte[8]; }
         }
-        
+
         [StructLayout(LayoutKind.Sequential)]
         public struct tsAdcGainCal_t
         {
@@ -154,7 +157,8 @@ namespace TS.NET.Driver.Libtslitex
             [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 8)]
             public tsAdcGain_t[] conf;
 
-            public tsAdcGainCal_t() {
+            public tsAdcGainCal_t()
+            {
                 conf = new tsAdcGain_t[8];
                 for (var cal = 0; cal < 8; cal++)
                 {
@@ -171,7 +175,8 @@ namespace TS.NET.Driver.Libtslitex
             [MarshalAs(UnmanagedType.ByValArray, ArraySubType = UnmanagedType.Struct, SizeConst = 11)]
             public tsAdcGainCal_t[] branchFineGain;
 
-            public tsAdcCalibration_t() {
+            public tsAdcCalibration_t()
+            {
                 loadCal = new tsAdcLoadCal_t[11];
                 branchFineGain = new tsAdcGainCal_t[11];
                 for (var cal = 0; cal < 11; cal++)
@@ -235,10 +240,10 @@ namespace TS.NET.Driver.Libtslitex
         public static unsafe partial int UserDataWrite(nint ts, byte* buffer, uint offset, uint writeLen);
 
         [DllImport(library, EntryPoint = "thunderscopeChanCalibrationSet")]     // Use runtime marshalling for now. Custom marshalling later.
-        public static extern int SetAFECalibration(nint ts, uint channel, in tsChannelCalibration_t cal);
+        public static extern int SetAfeCalibration(nint ts, uint channel, in tsFrontendCalibration_t cal);
 
         [DllImport(library, EntryPoint = "thunderscopeAdcCalibrationGet")]      // Use runtime marshalling for now. Custom marshalling later.
-        public static extern int GetAFECalibration(nint ts, uint channel, out tsChannelCalibration_t cal);
+        public static extern int GetAFECalibration(nint ts, uint channel, out tsFrontendCalibration_t cal);
 
         [DllImport(library, EntryPoint = "thunderscopeAdcCalibrationSet")]      // Use runtime marshalling for now. Custom marshalling later.
         public static extern int SetAdcCalibration(nint ts, in tsAdcCalibration_t cal);
@@ -261,7 +266,7 @@ namespace TS.NET.Driver.Libtslitex
 
         [LibraryImport(library, EntryPoint = "thunderscopeCalibrationManualCtrl")]
         public static unsafe partial int SetChannelManualControl(nint ts, uint channel, in tsChannelCtrl_t ctrl);
-        
+
         [LibraryImport(library, EntryPoint = "thunderscopeCalibrationManualAdcFineGain")]
         public static unsafe partial int SetAdcManualFineGain(nint ts, in byte[] ctrl);
 
