@@ -240,9 +240,9 @@ public class Thunderscope : IThunderscope
             throw new ThunderscopeException($"Failed to get channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
 
         channel.RequestedVoltFullScale = channelFrontend[channelIndex].RequestedVoltFullScale;
-        channel.ActualVoltFullScale = (double)tsChannel.volt_scale_uV / 1000000.0;
+        channel.ActualVoltFullScale = tsChannel.volt_scale_uV / 1000000.0;
         channel.RequestedVoltOffset = channelFrontend[channelIndex].RequestedVoltOffset;
-        channel.ActualVoltOffset = (double)tsChannel.volt_offset_uV / 1000000.0;
+        channel.ActualVoltOffset = tsChannel.volt_offset_uV / 1000000.0;
         channel.Coupling = (tsChannel.coupling == 1) ? ThunderscopeCoupling.AC : ThunderscopeCoupling.DC;
         channel.RequestedTermination = channelFrontend[channelIndex].RequestedTermination;
         channel.ActualTermination = (tsChannel.term == 1) ? ThunderscopeTermination.FiftyOhm : ThunderscopeTermination.OneMegaohm;
@@ -415,14 +415,34 @@ public class Thunderscope : IThunderscope
 
         retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
 
+        // libtslitex will return an error code if the requested channel configuration is not valid
+        // so consumers of libtslitex have the luxury of knowing immediately if there is an issue,
+        // whereas the SCPI API should not return error codes for commands so fall back to safe configurations if possible.
+
+        if (retVal < 0 && channel.RequestedTermination == ThunderscopeTermination.FiftyOhm)
+        {
+            logger.LogWarning($"Failed to set channel {channelIndex} configuration; retrying with 1M termination ({GetLibraryReturnString(retVal)})");
+            tsChannel.term = 0;
+            retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
+        }
+
+        // This fallback isn't elegant, future improvements could calculate the best effort configuration that gets close to requested configuration
         if (retVal < 0)
-            logger.LogCritical($"Failed to set channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
+        {
+            logger.LogWarning($"Failed to set channel {channelIndex} configuration; retrying with 40V range and 0V offset ({GetLibraryReturnString(retVal)})");
+            tsChannel.volt_scale_uV = 40_000_000;
+            tsChannel.volt_offset_uV = 0;
+            retVal = Interop.SetChannelConfig(tsHandle, (uint)channelIndex, in tsChannel);
+        }
+
+        if (retVal < 0)
+            logger.LogCritical($"Failed to set channel {channelIndex} configuration ({GetLibraryReturnString(retVal)})");
 
 
         retVal = Interop.GetChannelConfig(tsHandle, (uint)channelIndex, out tsChannel);
 
         if (retVal < 0)
-            throw new ThunderscopeException($"Failed to get channel {channelIndex} config ({GetLibraryReturnString(retVal)})");
+            throw new ThunderscopeException($"Failed to get channel {channelIndex} configuration ({GetLibraryReturnString(retVal)})");
 
         channelFrontend[channelIndex].ActualTermination = (tsChannel.term == 0) ? ThunderscopeTermination.OneMegaohm : ThunderscopeTermination.FiftyOhm;
         channelFrontend[channelIndex].ActualVoltFullScale = tsChannel.volt_scale_uV * 1000000.0;
